@@ -1,53 +1,52 @@
 package main
 
 import (
-	"fmt"
-	"net"
-	"os"
-	"strconv"
-	"time"
-	// "errors"
-	"strings"
+    "fmt"
+    "net"
+    "os"
+    "strconv"
+    "time"
+    "strings"
 )
 
-func ScanPort(ip string, port string, timeout time.Duration) {
-	target := fmt.Sprintf("%s:%s", ip, port)
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	// if err != nil {
-	// 	if strings.Contains(err.Error(), "refused") {
-	// 		fmt.Println(port, "filtered") 
-	// 	} else if strings.Contains(err.Error(), "timeout"){
-	// 		fmt.Println(port, "closed")
-	// 	} else {
-	// 		// fmt.Println(port, "error")
-	// 		ScanPort (ip, port, 500*time.Millisecond)
-	// 	}
-	// 	return
-	// }
+const numberOfPorts int = 65535
 
-	if err != nil {
-		if strings.Contains(err.Error(), "refused") == false && strings.Contains(err.Error(), "timeout") == false {
-			ScanPort (ip, port, 500*time.Millisecond)
-		}
-		return
-	}
+func scanport(ip string, port string, timeout time.Duration) {
+    target := fmt.Sprintf("%s:%s", ip, port)
+    conn, err := net.DialTimeout("tcp", target, timeout)
+    if err != nil {
+        if strings.Contains(err.Error(), "refused") == false && strings.Contains(err.Error(), "timeout") == false {
+            scanport (ip, port, 500*time.Millisecond)
+        }
+        return
+    }
+    conn.Close()
+    fmt.Println(port, "open")
+}
 
-	conn.Close()
-	fmt.Println(port, "open")
+func worker(id int, jobs <-chan int, results chan<- int, ip string, timeout time.Duration) {
+    for j := range jobs {
+        port := strconv.Itoa(j)
+        scanport(ip, port, timeout)
+        results <- j * 2
+    }
 }
 
 func main() {
+    ip := os.Args[1]
+    jobs := make(chan int, numberOfPorts)
+    results := make(chan int, numberOfPorts)
 
-	if len(os.Args) == 2 {
-		fmt.Println(os.Args)
-		ip := os.Args[1]
-		fmt.Println(ip)
-		for port := 0; port <= 65535; port++ {
-			port := strconv.Itoa(port)
-			go ScanPort (ip, port, 500*time.Millisecond)
-		}		
-	} else {
-		fmt.Println("Usage: scan ip")
-	}
+    for w := 1; w <= 100; w++ {
+        go worker(w, jobs, results, ip, 500*time.Millisecond)
+    }
 
+    for j := 1; j <= numberOfPorts; j++ {
+        jobs <- j
+    }
+    close(jobs)
+
+    for a := 1; a <= numberOfPorts; a++ {
+        <-results
+    }
 }
