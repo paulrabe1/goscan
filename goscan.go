@@ -10,6 +10,7 @@ import (
     "strings"
 )
 
+var errors int = 0
 const numberOfPorts int = 65535
 
 func scanport(ip string, port string, timeout time.Duration) {
@@ -17,7 +18,12 @@ func scanport(ip string, port string, timeout time.Duration) {
     conn, err := net.DialTimeout("tcp", target, timeout)
     if err != nil {
         if strings.Contains(err.Error(), "refused") == false && strings.Contains(err.Error(), "timeout") == false {
-            scanport (ip, port, 500*time.Millisecond)
+            errors++
+            if errors >= 1000 {
+                fmt.Println("Too many errors!!! Consider decreasing number of threads!")
+                os.Exit(1)
+            }
+            scanport (ip, port, timeout)
         }
         return
     }
@@ -34,20 +40,28 @@ func worker(id int, jobs <-chan int, results chan<- int, ip string, timeout time
 }
 
 func main() {
-    ip := os.Args[1]
-    jobs := make(chan int, numberOfPorts)
-    results := make(chan int, numberOfPorts)
+    if len(os.Args) == 4 {
+        ip := os.Args[1]
+        threads, _ := strconv.Atoi(os.Args[2])
+        numOfMilliseconds, _ := strconv.Atoi(os.Args[3])
+        timeout := time.Duration(numOfMilliseconds)*time.Millisecond
 
-    for w := 1; w <= 100; w++ {
-        go worker(w, jobs, results, ip, 500*time.Millisecond)
-    }
+        jobs := make(chan int, numberOfPorts)
+        results := make(chan int, numberOfPorts)
 
-    for j := 1; j <= numberOfPorts; j++ {
-        jobs <- j
-    }
-    close(jobs)
+        for w := 1; w <= threads; w++ {
+            go worker(w, jobs, results, ip, timeout)
+        }
 
-    for a := 1; a <= numberOfPorts; a++ {
-        <-results
+        for j := 1; j <= numberOfPorts; j++ {
+            jobs <- j
+        }
+        close(jobs)
+
+        for a := 1; a <= numberOfPorts; a++ {
+            <-results
+        }   
+    } else {
+        fmt.Println("Usage: ip threads timeout(milliseconds)")
     }
 }
